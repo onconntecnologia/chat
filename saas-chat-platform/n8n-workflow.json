@@ -1,0 +1,389 @@
+{
+  "name": "Chat AI Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-message",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"sender_type\"]}}",
+              "operation": "equal",
+              "value2": "customer"
+            }
+          ]
+        }
+      },
+      "name": "Is Customer Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{$json[\"supabaseUrl\"]}}/rest/v1/ai_configurations",
+        "options": {
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "company_id",
+                "value": "={{$json[\"chatData\"][\"company_id\"]}}"
+              },
+              {
+                "name": "is_enabled",
+                "value": "true"
+              },
+              {
+                "name": "select",
+                "value": "*"
+              }
+            ]
+          },
+          "headers": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$json[\"supabaseKey\"]}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Get AI Configuration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"body\"].length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "AI Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{$json[\"supabaseUrl\"]}}/rest/v1/messages",
+        "options": {
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "chat_id",
+                "value": "={{$node[\"Webhook\"].json[\"chatId\"]}}"
+              },
+              {
+                "name": "order",
+                "value": "created_at.desc"
+              },
+              {
+                "name": "limit",
+                "value": "10"
+              },
+              {
+                "name": "select",
+                "value": "*"
+              }
+            ]
+          },
+          "headers": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$json[\"supabaseKey\"]}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Get Recent Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatModel": "gpt-3.5-turbo",
+        "options": {
+          "temperature": "={{$node[\"Get AI Configuration\"].json[\"body\"][0][\"temperature\"]}}",
+          "maxTokens": "={{$node[\"Get AI Configuration\"].json[\"body\"][0][\"max_tokens\"]}}"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "={{$node[\"Get AI Configuration\"].json[\"body\"][0][\"prompt_template\"] || \"Você é um assistente de atendimento ao cliente para a empresa \" + $node[\"Webhook\"].json[\"chatData\"][\"companies\"][\"name\"] + \". Seja educado, profissional e útil. Responda de forma concisa e clara. Se não souber a resposta, diga que vai encaminhar para um atendente humano.\"}}"
+            },
+            {
+              "role": "user",
+              "content": "=Histórico de mensagens recentes:\n\n{{$node[\"Get Recent Messages\"].json[\"body\"].map(msg => `${msg.sender_type === \"customer\" ? \"Cliente\" : \"Atendente\"}: ${msg.content}`).reverse().join(\"\\n\")}}\n\nNova mensagem do cliente: {{$node[\"Webhook\"].json[\"content\"]}}"
+            }
+          ]
+        },
+        "output": "text"
+      },
+      "name": "Generate AI Response",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json[\"supabaseUrl\"]}}/rest/v1/messages",
+        "authentication": "headerAuth",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          }
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "chat_id",
+              "value": "={{$node[\"Webhook\"].json[\"chatId\"]}}"
+            },
+            {
+              "name": "sender_id",
+              "value": "system"
+            },
+            {
+              "name": "sender_type",
+              "value": "ai"
+            },
+            {
+              "name": "content",
+              "value": "={{$json[\"text\"]}}"
+            },
+            {
+              "name": "is_read",
+              "value": false
+            },
+            {
+              "name": "metadata",
+              "value": "={\"ai_model\": \"{{$node[\"Get AI Configuration\"].json[\"body\"][0][\"model\"]}}\", \"temperature\": {{$node[\"Get AI Configuration\"].json[\"body\"][0][\"temperature\"]}}, \"max_tokens\": {{$node[\"Get AI Configuration\"].json[\"body\"][0][\"max_tokens\"]}}, \"processed_by_n8n\": true}"
+            }
+          ]
+        }
+      },
+      "name": "Send AI Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json[\"supabaseUrl\"]}}/rest/v1/chats?id=eq.{{$node[\"Webhook\"].json[\"chatId\"]}}",
+        "authentication": "headerAuth",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$json[\"supabaseKey\"]}}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          }
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "updated_at",
+              "value": "={{$now}}"
+            }
+          ]
+        }
+      },
+      "name": "Update Chat Timestamp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1650,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "No Action",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Customer Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Customer Message?": {
+      "main": [
+        [
+          {
+            "node": "Get AI Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get AI Configuration": {
+      "main": [
+        [
+          {
+            "node": "AI Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Messages": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send AI Response": {
+      "main": [
+        [
+          {
+            "node": "Update Chat Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

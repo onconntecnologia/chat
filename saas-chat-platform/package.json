@@ -1,0 +1,32 @@
+{
+  "name": "saas-chat-platform",
+  "version": "1.0.0",
+  "description": "Plataforma de atendimento SaaS com foco em chat",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:container\" \"npm run start:auth\" \"npm run start:admin\" \"npm run start:chat\" \"npm run start:api\"",
+    "start:container": "cd container && npm start",
+    "start:auth": "cd mfe-auth && npm start",
+    "start:admin": "cd mfe-admin && npm start",
+    "start:chat": "cd mfe-chat && npm start",
+    "start:api": "cd api-gateway && npm run dev",
+    "install:all": "concurrently \"npm run install:container\" \"npm run install:auth\" \"npm run install:admin\" \"npm run install:chat\" \"npm run install:api\"",
+    "install:container": "cd container && npm install",
+    "install:auth": "cd mfe-auth && npm install",
+    "install:admin": "cd mfe-admin && npm install",
+    "install:chat": "cd mfe-chat && npm install",
+    "install:api": "cd api-gateway && npm install"
+  },
+  "keywords": [
+    "saas",
+    "chat",
+    "microfrontend",
+    "supabase",
+    "n8n"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
